@@ -4,7 +4,7 @@ from scipy.signal import find_peaks
 import aux_functions as af
 
 
-def abm_light_curve(path_vec,theta_lim,beta_lim,n_pixels,eta,num_iter,delta_beta,m,zeta,parameters):
+def abm_light_curve(path_vec, theta_lim, beta_lim, n_pixels, eta, num_iter, delta_beta, state):
     """
     Performs the calculation of the light curve based on the given path path_vec.
     :param path_vec: an (n_steps,2) array containing n_steps sets of coordinates for the path
@@ -14,25 +14,23 @@ def abm_light_curve(path_vec,theta_lim,beta_lim,n_pixels,eta,num_iter,delta_beta
     :param eta: The source plane division factor of the AOP algorithm
     :param num_iter: The number of divisions of the AOP algorithm
     :param delta_beta: The final source plane half-boundary for the AOP algorithm; scalar - same boundary for both axis
-    :param m: Vector of masses of points sources in units of solar mass
-    :param zeta: Array of angular position of point sources (horizontal,vertical) (n,2)
-    :param parameters: A dictionary containing essential parameters of the script
+    :param state: A dictionary containing essential parameters of the script
     :return: A numpy array of magnification values (true count) of each step in the given path
     """
     # unique image plane area of each ray
     s_img = 4 * theta_lim[0] * theta_lim[1] / n_pixels ** (2 * np.floor(num_iter)+2)
-    kernel_flag = parameters['kernel_flag']  # whether or nor to apply Gaussian kernel
+    kernel_flag = state['kernel_flag']  # whether or nor to apply Gaussian kernel
     if kernel_flag:
         kernel = gaussian_kernel(3, 9)  # 9X9 matrix, corresponding to a range of +-3*sigma of a Gaussian kernel
     light_curve = []
     for i, path_point in enumerate(path_vec):
-        start_time=time.time()
+        start_time = time.time()
         theta_rays, beta_rays = abm_single_routine(theta_lim, [0, 0], beta_lim, path_point, n_pixels, eta, 0, num_iter,
-                                                   m, zeta, parameters)
+                                                   state)
         if beta_rays.shape[0] > 1:  # if there are rays in this source plane region
             if kernel_flag:  # to apply Gaussian profile
-                #  bin the source plane area of +- 3 delta_beta
-                _, _, bins_mag = af.mag_binning(beta_rays, s_img, 2 * 3 * delta_beta, 9, path_point)
+                #  bin the source plane area of +- delta_beta, with 9^2 bins
+                _, _, bins_mag = af.mag_binning(beta_rays, s_img, 2 * delta_beta, 9, path_point)
                 #  weigh bins using Gaussian profile of +- 3 half widths
                 light_curve.append(np.sum(kernel * bins_mag))
             else:  # not to apply Gaussian profile
@@ -55,8 +53,6 @@ def abm_method(state):
     epsilon = state['epsilon']
     mu_h = state['mu_h']
     mu_v = state['mu_v']
-    m = state['m']
-    zeta = state['zeta']
     source_size = state['source_size']
     n_pixels = state['n_pixels']
     n_steps = state['n_steps']
@@ -70,13 +66,8 @@ def abm_method(state):
     # eta: the factor by which the initial beta boundary around a source point is divided in each iteration
     eta = n_pixels * state['eta_ratio']
     state['eta'] = eta
-    if state['kernel_flag']:
-        # reach a region of +-3 times the source size
-        # The number of iterations, note it is a real number, and not an integer
-        num_iter=1 + np.log(beta_boundary_0 / (3 * delta_beta)) / np.log(eta)
-    else:
-        # The number of iterations, note it is a real number, and not an integer
-        num_iter = 1 + np.log(beta_boundary_0 / delta_beta) / np.log(eta)
+    # The number of iterations, note it is a real number, and not an integer
+    num_iter = 1 + np.log(beta_boundary_0 / delta_beta) / np.log(eta)
     state['num_iter'] = num_iter
     print('Image plane division factor is ' + str(n_pixels))
     print('Source plane boundary division factor is ' + str(eta))
@@ -88,13 +79,13 @@ def abm_method(state):
     path_vec = np.linspace(-beta_boundary / 2, beta_boundary / 2, num=n_steps, endpoint=True)
     path_vec = np.vstack((path_vec, np.zeros((1,path_vec.shape[0])))).T
     # calculating the light curve based on the path vector
-    light_curve = abm_light_curve(path_vec, theta_boundaries, beta_boundary_0, n_pixels, eta, num_iter, delta_beta, m,
-                                  zeta, state)
+    light_curve = abm_light_curve(path_vec, theta_boundaries, beta_boundary_0, n_pixels, eta, num_iter, delta_beta,
+                                  state)
     print('Totally finished in ' + str(time.time() - start_time))
     print('Refining parallel light curve path')
     start_time = time.time()
-    time_steps, light_curve = refine_light_curve(path_vec,light_curve,vt_ein, theta_boundaries, beta_boundary_0,
-                                                 n_pixels, eta,num_iter, delta_beta, m, zeta, state)
+    time_steps, light_curve = refine_light_curve(path_vec, light_curve, vt_ein, theta_boundaries, beta_boundary_0,
+                                                 n_pixels, eta, num_iter, delta_beta, state)
     print('Totally finished in ' + str(time.time() - start_time))
 
 
@@ -104,38 +95,39 @@ def abm_method(state):
     path_vec = np.vstack((np.zeros((1, path_vec.shape[0])), path_vec)).T
     # calculating the light curve based on the path vector
     light_curve_perp = abm_light_curve(path_vec, theta_boundaries, beta_boundary_0, n_pixels, eta, num_iter, delta_beta,
-                                       m, zeta, state)
+                                       state)
     print('Totally finished in ' + str(time.time() - start_time))
     print('Refining perpendicular light curve path')
     start_time = time.time()
     time_steps_perp, light_curve_perp = refine_light_curve(path_vec, light_curve_perp, vt_ein, theta_boundaries,
-                                                           beta_boundary_0,n_pixels, eta, num_iter, delta_beta, m, zeta
-                                                           ,state)
+                                                           beta_boundary_0, n_pixels, eta, num_iter, delta_beta, state)
     print('Totally finished in ' + str(time.time() - start_time))
     return time_steps, light_curve, time_steps_perp, light_curve_perp
 
 
-def abm_routine_demonstrate(theta_boundaries, theta_offset, beta_boundaries, beta_offset, n_pixels, eta, itr_n,
-                max_itr, m, zeta, parameters):
+def abm_single_routine(theta_boundaries, theta_offset, beta_boundaries, beta_offset, n_pixels, eta, itr_n, max_itr,
+                       state):
     """
-
-    :param theta_boundaries:
-    :param theta_offset:
-    :param beta_boundaries:
-    :param beta_offset:
-    :param n_pixels:
-    :param eta:
-    :param itr_n:
-    :param max_itr:
-    :param m:
-    :param zeta:
-    :param parameters:
+    This is a recursive method, to start the method from initial conditions make sure itr_n=0.
+    This is the ABM routine for a single point in the source plane. For each iteration, of the max_itr, an image plane
+    area is divided to n_pixels^2, while the source plane area is reduced by a factor eta^2. Only those image plane
+    pixels that map within the source plane boundary continue the recursive algorithm. If this is the last iteration,
+    the source plane division factor is reduced to fit the final desired source plane resolution.
+    :param theta_boundaries: The image plane half boundaries ([horizontal,vertical] - rectangular area)
+    :param theta_offset: The center coordinates of the image plane area ([horizontal,vertical])
+    :param beta_boundaries: The radius of the source plane area (circular region)
+    :param beta_offset: The center coordinates of the source plane area ([horizontal,vertical])
+    :param n_pixels: The number of pixels to divide the image plane area in each axis
+    :param eta: The source plane scale division factor
+    :param itr_n: The number of current iteration.
+    :param max_itr: The maximum number of iterations, a real number, determined by the final source plane resolution
+    :param state: A dictionary containing essential parameters of the script
     :return:
     """
     n1 = int(np.floor(max_itr))  # the integer part of the number of iterations
     n2 = max_itr - n1  # the remainder of the real number of iterations
-    rel_pixels, rel_pixels_beta = split_and_identify(theta_boundaries, theta_offset, beta_boundaries, beta_offset, m,
-                                                     zeta, parameters, n_pixels)
+    rel_pixels, rel_pixels_beta = split_and_identify(theta_boundaries, theta_offset, beta_boundaries, beta_offset,
+                                                     n_pixels, state)
     new_theta_boundaries = [theta_boundaries[0] / n_pixels, theta_boundaries[1] / n_pixels]
     total_rel_pixel = []
     total_rel_pixel_beta = []
@@ -143,48 +135,7 @@ def abm_routine_demonstrate(theta_boundaries, theta_offset, beta_boundaries, bet
         new_beta_boundaries = beta_boundaries / eta  # decrease the source plane boundary by a factor eta
         for rel_pixel in rel_pixels:
             temp_pixels, temp_pixels_beta = abm_single_routine(new_theta_boundaries, rel_pixel, new_beta_boundaries,
-                                                               beta_offset, n_pixels, eta, itr_n + 1, max_itr, m, zeta,
-                                                               parameters)
-            if len(temp_pixels_beta) > 0:
-                total_rel_pixel.append(temp_pixels)
-                total_rel_pixel_beta.append(temp_pixels_beta)
-    elif len(rel_pixels) > 0:  # finished dividing source plane, reached desired boundary. Collect relevant pixels
-        total_rel_pixel.append(rel_pixels)
-        total_rel_pixel_beta.append(rel_pixels_beta)
-    return np.array([item for sublist in total_rel_pixel for item in sublist]), \
-           np.array([item for sublist in total_rel_pixel_beta for item in sublist])
-
-
-def abm_single_routine(theta_boundaries, theta_offset, beta_boundaries, beta_offset, n_pixels, eta, itr_n,
-                max_itr, m, zeta, parameters):
-    """
-
-    :param theta_boundaries:
-    :param theta_offset:
-    :param beta_boundaries:
-    :param beta_offset:
-    :param n_pixels:
-    :param eta:
-    :param itr_n:
-    :param max_itr:
-    :param m:
-    :param zeta:
-    :param parameters:
-    :return:
-    """
-    n1 = int(np.floor(max_itr))  # the integer part of the number of iterations
-    n2 = max_itr - n1  # the remainder of the real number of iterations
-    rel_pixels, rel_pixels_beta = split_and_identify(theta_boundaries, theta_offset, beta_boundaries, beta_offset, m,
-                                                     zeta, parameters, n_pixels)
-    new_theta_boundaries = [theta_boundaries[0] / n_pixels, theta_boundaries[1] / n_pixels]
-    total_rel_pixel = []
-    total_rel_pixel_beta = []
-    if itr_n < n1 - 1:  # if didn't reach the final division
-        new_beta_boundaries = beta_boundaries / eta  # decrease the source plane boundary by a factor eta
-        for rel_pixel in rel_pixels:
-            temp_pixels, temp_pixels_beta = abm_single_routine(new_theta_boundaries, rel_pixel, new_beta_boundaries,
-                                                               beta_offset, n_pixels, eta, itr_n + 1, max_itr, m, zeta,
-                                                               parameters)
+                                                               beta_offset, n_pixels, eta, itr_n + 1, max_itr, state)
             if len(temp_pixels_beta) > 0:
                 total_rel_pixel.append(temp_pixels)
                 total_rel_pixel_beta.append(temp_pixels_beta)
@@ -192,8 +143,7 @@ def abm_single_routine(theta_boundaries, theta_offset, beta_boundaries, beta_off
         new_beta_boundaries = beta_boundaries / eta ** n2  # decrease the source plane boundary by a factor eta^n2
         for rel_pixel in rel_pixels:
             temp_pixels, temp_pixels_beta = abm_single_routine(new_theta_boundaries, rel_pixel, new_beta_boundaries,
-                                                               beta_offset, n_pixels, eta, itr_n + 1, max_itr, m, zeta,
-                                                               parameters)
+                                                               beta_offset, n_pixels, eta, itr_n + 1, max_itr, state)
             if len(temp_pixels_beta) > 0:
                 total_rel_pixel.append(temp_pixels)
                 total_rel_pixel_beta.append(temp_pixels_beta)
@@ -204,7 +154,7 @@ def abm_single_routine(theta_boundaries, theta_offset, beta_boundaries, beta_off
            np.array([item for sublist in total_rel_pixel_beta for item in sublist])
 
 
-def gaussian_kernel(num_sigma,num_pixels):
+def gaussian_kernel(num_sigma, num_pixels):
     """
     Returns an array representing a kernel of Gaussian distribution, in the range +-num_sigma * sigma
     :param num_sigma: the number of half_widths in each direction; half-boundary of the kernel
@@ -229,27 +179,28 @@ def path2displacement(path_vec):
     return np.sqrt(h_delta ** 2 + v_delta ** 2)
 
 
-def refine_light_curve(path_vec,light_curve,vt_ein, theta_boundaries, beta_boundary_0, n_pixels, eta,num_iter,
-                       delta_beta, m, zeta, parameters):
+def refine_light_curve(path_vec, light_curve, vt_ein, theta_lim, beta_lim, n_pixels, eta, num_iter,
+                       delta_beta, state):
     """
-
-    :param path_vec:
-    :param light_curve:
-    :param vt_ein:
-    :param theta_boundaries:
-    :param beta_boundary_0:
-    :param n_pixels:
-    :param eta:
-    :param num_iter:
-    :param delta_beta:
-    :param m:
-    :param zeta:
-    :param parameters:
-    :return:
+    This function analyzes the light curve path (full coordinates) and magnitude, and return a refined path with more
+    sampling points around prominent peaks in the light curve. The function returns light curve vector, as well as the
+    complimentary time steps vector, in units of years, containing the input light curve as well as the newly sampled
+    points.
+    :param path_vec: numpy array containing the coordinates of each step in the input light curve (n_steps,2)
+    :param light_curve: numpy array containing the magnification value of each step in the light curve
+    :param vt_ein: The transverse velocity in units of Einstein radii per second
+    :param theta_lim: Initial image plane half-boundaries for the AOP algorithm;in Einstein radii;[horizontal, vertical]
+    :param beta_lim: Initial source plane half-boundaries for the AOP algorithm;in Einstein radii; scalar
+    :param n_pixels: The image plane division factor of the AOP algorithm
+    :param eta: The source plane division factor of the AOP algorithm
+    :param num_iter: The number of divisions of the AOP algorithm
+    :param delta_beta: The final source plane half-boundary for the AOP algorithm; scalar - same boundary for both axis
+    :param state: A dictionary containing essential parameters of the script
+    :return: time steps vector, and light curve vector
     """
     refined_path_vec = refine_time_steps(path_vec,light_curve)
-    refined_light_curve = abm_light_curve(refined_path_vec, theta_boundaries, beta_boundary_0, n_pixels, eta, num_iter,
-                                          delta_beta, m, zeta, parameters)
+    refined_light_curve = abm_light_curve(refined_path_vec, theta_lim, beta_lim, n_pixels, eta, num_iter,
+                                          delta_beta, state)
     # Order both path_vec and refined_path_vec based on displacement from initial point of path_vec
     # time steps in units of years
     time_steps = path2displacement(path_vec) * (1 / vt_ein / 31557600)  # displacement of path_vec
@@ -263,10 +214,10 @@ def refine_light_curve(path_vec,light_curve,vt_ein, theta_boundaries, beta_bound
     return time_steps, light_curve_complete
 
 
-def refine_time_steps(path_steps,light_curve_in):
+def refine_time_steps(path_steps, light_curve_in):
     """
     Returns a numpy array of refined path steps based on peaks in original light curve.
-    Uses a peak finding technique "find_peaks" from scipy.signal; Divide the additional time steps proportinal to the
+    Uses a peak finding technique "find_peaks" from scipy.signal; Divide the additional time steps proportional to the
     inverse of the width of each detected peak.
     :param path_steps: numpy array of size (n,2) of the n path steps
     :param light_curve_in: numpy array of magnification count per time step
@@ -301,24 +252,25 @@ def refine_time_steps(path_steps,light_curve_in):
     return np.vstack((new_path_steps_h,new_path_steps_v)).T  # to yield an (n,2) array
 
 
-def split_and_identify(theta_boundaries, theta_offset, beta_lim, beta_offset, m, zeta, parameters, n_pixels):
+def split_and_identify(theta_boundaries, theta_offset, beta_lim, beta_offset, n_pixels, state):
     """
     splitting the image plane region given by +-beta_boundary from the center point theta_offset. Then map these rays to
     the source plane and then return those rays that map to and area +-beta_boundary from the center point beta_offset.
-    :param theta_boundaries:
-    :param theta_offset:
-    :param beta_lim:
-    :param beta_offset:
-    :param m:
-    :param zeta:
-    :param parameters:
-    :param n_pixels:
-    :return:
+    :param theta_boundaries: The image plane half boundaries ([horizontal,vertical] - rectangular area)
+    :param theta_offset: The center coordinates of the image plane area ([horizontal,vertical])
+    :param beta_lim: The radius of the source plane area (circular region)
+    :param beta_offset: The center coordinates of the source plane area ([horizontal,vertical])
+    :param n_pixels: The number of pixels to divide the image plane area in each axis
+    :param state: A dictionary containing essential parameters of the script
+    :return: python list of image plane pixels and python list of mapped source plane pixels, both lists only with
+    pixels that map into the given source plane boundary.
     """
+    m = state['m']  # The masses of the lens
+    zeta = state['zeta']  # The coordinates of each mass in the lens
     # First split the image plane region to n_pixels X n_pixels pixels
     theta_pixels = af.tessellate_area(theta_boundaries, theta_offset, n_pixels ** 2, ret_vertices=False)
     # Map these image plane pixels to the source plane
-    beta_pixels = af.img2src(theta_pixels, m, zeta, parameters)
+    beta_pixels = af.img2src(theta_pixels, m, zeta, state)
     # Identify relevant pixels, that map to the source plane region of interest
     rel_pixels = np.nonzero(((beta_offset[0] - beta_pixels[:, 0]) ** 2 + (beta_offset[1] - beta_pixels[:, 1]) ** 2)
                             < beta_lim ** 2)[0]

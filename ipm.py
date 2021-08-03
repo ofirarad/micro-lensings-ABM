@@ -5,7 +5,7 @@ import aux_functions as af
 
 def crit_curves(centers, A0, dhA, dvA, h_size, v_size):
     # returning a list of slopes and intercept terms for the critical curves linear-approximation,
-    # for given cells of size (h_size X v_size). All measurements are in arc-sec
+    # for given cells of size (h_size X v_size).
     slopes = -dhA / dvA
     h0 = centers[:, 0].reshape(slopes.shape)
     v0 = centers[:, 1].reshape(slopes.shape)
@@ -22,6 +22,8 @@ def crit_curves(centers, A0, dhA, dvA, h_size, v_size):
 def ipm_method(state):
     """
     The main routine for running the gravitational lensing simulation using the Inverse Polygon Method (Mediavilla 2006)
+    The function returns the horizontal and vertical coordinates mesh-grids, the magnification grid, as well as the
+    list of non-linear detected tiles.
     :param state: a dictionary containing all variables of the lens and user definitions
     :return: beta_grid_h, beta_grid_v, mu_grid, nlin_tiles
     """
@@ -111,15 +113,15 @@ def ipm_method(state):
     start_time = time.time()
     beta_grid_h, beta_grid_v, mu_grid, nlin_tiles = polygons_binning(source_tiles, tiles, dA, state)
     print('Finished binning in ' + str(time.time() - start_time) + 's')
-    return beta_grid_h, beta_grid_v, mu_grid, nlin_tiles, beta, theta
+    return beta_grid_h, beta_grid_v, mu_grid, nlin_tiles
 
 
 def poly_pixel_overlap(polygon, h_min, v_min, d_h, d_v, no_pixel=False):
     """
+    Returns the overlap area between a pixel and a given polygon.
     v_min and h_min are the bottom and left boundaries of the pixel.
     d_h and d_v are the horizontal and vertical size of 1 pixel
     polygon is a numpy array of size (q,2) where each row represents the horizontal and vertical coordinates of a vertex
-
     :param polygon:
     :param h_min:
     :param v_min:
@@ -142,6 +144,7 @@ def poly_pixel_overlap(polygon, h_min, v_min, d_h, d_v, no_pixel=False):
         v_max = v_min + d_v
         h_max = h_min + d_h
     s_tot = 0
+    s = 1
 
     if h_max < np.min(polygon[:, 0]) or h_min > np.max(polygon[:, 0]) \
             or v_max < np.min(polygon[:, 1]) or v_min > np.max(polygon[:, 1]):
@@ -199,12 +202,15 @@ def poly_pixel_overlap(polygon, h_min, v_min, d_h, d_v, no_pixel=False):
 
 def polygons_binning(source_polygons, image_polygons, dA, state):
     """
-
-    :param source_polygons:
-    :param image_polygons:
-    :param dA:
+    Based on Medivilla (2006), this function performs binning of source plane polygon over a predefined grid. Polygons
+    in the image plane are assumed to be of the same rectangular shape. It returns the
+    coordinates mesh grids (horizontal and vertical), as well as the normalized (per cell area) magnification value of
+    each cell.
+    :param source_polygons: a list of 4-sides polygons (each polygon is a numpy array of size (4,2)) in the source plane
+    :param image_polygons: a list of 4-sides polygons (each polygon is a numpy array of size (4,2)) in the image plane
+    :param dA: The transformation Jacobian and its directional derivatives (a list of size (# polygons,3))
     :param state: a dictionary containing all variables of the lens and user definitions
-    :return:
+    :return: horizontal coordinates mesh grid, vertical coordinates mesh grid, magnification grid
     """
     m = state['m']
     zeta = state['zeta']
@@ -225,7 +231,6 @@ def polygons_binning(source_polygons, image_polygons, dA, state):
     # the angular area of a single polygons in the image plane, assuming tiles of same size
     s_img = poly_pixel_overlap(image_polygons[0], 0, 0, 0, 0, no_pixel=True)
     tile_size = np.sqrt(s_img)  # assuming a rectangular tile
-    start_time = time.time()
     # The non-linear tiles criterion, from Mediavilla (2006)
     non_crit_cells = np.squeeze((np.abs(dA[:, 1]) + np.abs(dA[:, 2])) * tile_size / 100 < np.abs(dA[:, 0]))
     start_time = time.time()
@@ -240,10 +245,12 @@ def polygons_binning(source_polygons, image_polygons, dA, state):
             p_max_v = np.max(polygon[:, 1])  # the highest horizontal line
             for j, pixel_h in enumerate(grid_vec_h):
                 # pixel_h is the angular horizontal value of the j-th column
-                if p_min_h - 1 * h_step <= pixel_h <= p_max_h + 0 * h_step:  # to only calculate the overlap with relevant pixels
+                if p_min_h - 1 * h_step <= pixel_h <= p_max_h + 0 * h_step:  # to only calculate the overlap with
+                    # relevant pixels
                     for k, pixel_v in enumerate(grid_vec_v):
                         # pixel_v is the angular horizontal value of the k-th row
-                        if p_min_v - 1 * v_step <= pixel_v <= p_max_v + 0 * v_step:  # to only calculate the overlap with relevant pixels
+                        if p_min_v - 1 * v_step <= pixel_v <= p_max_v + 0 * v_step:  # to only calculate the overlap
+                            # with relevant pixels
                             # the area of the polygon-pixel overlap in the source plane
                             # normalized by the average cell magnification; Eq.(21) Mediavilla (2011)
                             mu_tot[j, k] += avg_mu * poly_pixel_overlap(polygon, pixel_h, pixel_v, h_step,
@@ -264,8 +271,8 @@ def polygons_binning(source_polygons, image_polygons, dA, state):
                 for k, tmp_beta in enumerate(sub_tiles_beta):
                     idx_h = int((tmp_beta[0] - grid_vec_h[0]) // h_step)  # the horizontal index of the relevant ray
                     idx_v = int((tmp_beta[1] - grid_vec_v[0]) // v_step)  # the horizontal index of the relevant ray
-                    if idx_h >= 0 and idx_v >= 0 and idx_h < res and idx_v < res:
-                        mu_tot[idx_h, idx_v] += s_img / (IRS_nlin_tiles)  # simple IRS method
+                    if 0 <= idx_h < res and 0 <= idx_v < res:
+                        mu_tot[idx_h, idx_v] += s_img / IRS_nlin_tiles  # simple IRS method
                         # normalized by the average cell magnification; Eq.(21) Medevilla (2011)
             else:
                 non_lin_polygons.append(i)
@@ -279,8 +286,8 @@ def polygons_binning(source_polygons, image_polygons, dA, state):
 def retrieve_polygons(theta_vert):
     """
     returns a list of polygons coordinates, ordered from bottom left to top right, horizontal then vertical
-    :param theta_vert: the complete list of vertices coordinates ordered from bottom left to top right, horizontal then vertical
-    :return: polygons: the list of numpy arrays of coordinates of each polygon's vertices v1->v2->v3->v4 (counter clockwise)
+    :param theta_vert: the complete list of vertices coordinates
+    :return: polygons: list of numpy arrays of coordinates of each polygon's vertices v1->v2->v3->v4 (counter clockwise)
     """
     tiles_per_dim = int(np.sqrt(theta_vert.shape[0]) - 1)
     polygons = []
@@ -297,9 +304,10 @@ def retrieve_polygons(theta_vert):
 
 def tetra_sides(polygon):
     """
-
+    Return a list of line equations that form the polygon.
+    Each line is a numpy array of (slope, intercept, low boundary, high boundary)
     :param polygon:
-    :return:
+    :return: l, list of lines.
     """
     l = []
     num_ver = polygon.shape[0]
@@ -310,10 +318,11 @@ def tetra_sides(polygon):
 
 def vertices2line(ver1, ver2):
     """
-
-    :param ver1:
-    :param ver2:
-    :return:
+    Given two 2D coordinates, returns the parameters of the line equation between them.
+    Line is a numpy array of (slope, intercept, low boundary, high boundary)
+    :param ver1: First point
+    :param ver2: Second point
+    :return: numpy array of line parameters
     """
     eps = 10 ** (-16)
     x1 = ver1[0]

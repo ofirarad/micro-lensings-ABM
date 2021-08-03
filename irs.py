@@ -51,7 +51,7 @@ def irs_method(state):
     mu_grid_temp_array = Parallel(n_jobs=num_cores, require='sharedmem')\
         (delayed(parallel_irs)(i,mu_grid,l_tmp,n_runs,s_ray,theta_boundaries,start_time,state) for i in range(n_runs))
 
-    if (n_runs * l_tmp < num_of_img):  # if some values are left
+    if n_runs * l_tmp < num_of_img:  # if some values are left
         # Drawing images locations
         theta = random_image_draw(int(num_of_img - n_runs * l_tmp), theta_boundaries[0], theta_boundaries[1])
         # Calculating locations of sources and corresponding magnitudes
@@ -62,21 +62,23 @@ def irs_method(state):
         print('Finished shooting in ' + str(time.time() - start_time) + 's')
     else:
         print('Finished shooting in ' + str(time.time() - start_time) + 's')
+        beta = np.ones(2, 2)  # Just so that the next line can run smoothly and return beta_grid_h and beta_grid_v
+        beta_grid_h, beta_grid_v, mu_grid_temp = af.mag_binning(beta, s_ray, beta_boundary, beta_res)
 
-    return beta_grid_h, beta_grid_v, mu_grid, beta, theta
+    return beta_grid_h, beta_grid_v, mu_grid
 
 
 def parallel_irs(i,mu_grid,l_tmp,max_runs,s_ray,theta_boundaries,start_time,state):
     """
     Auxiliary function for the parallel computation of the ray shooting simulation, within the scope of irs_method
     :param i: an index for order of parallelization
-    :param mu_grid:
-    :param l_tmp:
-    :param max_runs:
-    :param s_ray:
-    :param theta_boundaries:
-    :param start_time:
-    :param state:
+    :param mu_grid: The magnification grid
+    :param l_tmp: The number of rays to work on withing the same batch
+    :param max_runs: The maximum runs of this parallel method
+    :param s_ray: The image plane area each ray individually takes
+    :param theta_boundaries: The half boundaries in the image plane, horizontal and vertical
+    :param start_time: The initial start time, as a time object (time library)
+    :param state: The dictionary containing all parameters of the lens, and all user inputs
     :return: dummy variable, results are saved under the outer-scope variable mu_grid
     """
     beta_boundary = state['beta_boundary']
@@ -99,16 +101,16 @@ def parallel_irs(i,mu_grid,l_tmp,max_runs,s_ray,theta_boundaries,start_time,stat
 
 def random_image_draw(num_of_img, h_lim, v_lim,ellipse=False):
     """
-
-    :param num_of_img:
-    :param h_lim:
-    :param v_lim:
-    :param ellipse:
-    :return:
+    This functions randomly draws images in a given rectangle, or if specified, in the enclosed ellipse.
+    :param num_of_img: number of images to draw
+    :param h_lim: half horizontal boundary
+    :param v_lim: half vertical boundary
+    :param ellipse: whether to draw from an ellipse of semi-major and semi-minor axes h_lim and v_lim
+    :return: numpy array of size (num_of_img,2), of horizontal and vertical coordinates
     """
     if ellipse:
         ellipse_box_num = int(
-            num_of_img * 1.27324)  # We need this many images in a box to get ~ num_of_img images in the contained ellipse
+            num_of_img * 1.27324)  #  to get ~ num_of_img images in the contained ellipse
         theta = np.hstack((h_lim * (2 * np.random.rand(ellipse_box_num).reshape(ellipse_box_num, 1) - 1),
                            v_lim * (2 * np.random.rand(ellipse_box_num).reshape(ellipse_box_num, 1) - 1)))
         theta = theta[(theta[:, 0] / h_lim) ** 2 + (theta[:, 1] / v_lim) ** 2 < 1]
