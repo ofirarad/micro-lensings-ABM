@@ -5,15 +5,15 @@ import matplotlib.colors
 import matplotlib.pyplot as plt
 
 
-def caustic_plot(beta_grid_h, beta_grid_v, mu_tot, filename, state):
+def caustic_plot(beta_grid_h, beta_grid_v, mu_tot, state, plot_flag = True):
     """
     Requires matplotlib.
     This functions plots the casutic map, given a magnification grid.
     :param beta_grid_h: The horizontal coordinates mesh grid
     :param beta_grid_v: The vertical coordinates mesh grid
     :param mu_tot: The magnification values grid
-    :param filename: The file name to be saved
     :param state: A dictionary containing essential parameters of the script
+    :param plot_flag: Whether or not to plot the figure
     :return:
     """
     kappa = state['kappa']
@@ -33,9 +33,6 @@ def caustic_plot(beta_grid_h, beta_grid_v, mu_tot, filename, state):
         num_of_img = state['num_of_img']
         rays_per_pixel = state['rays_per_pixel']
     zoom = state['beta_zoom']
-    save_flag = state['save_flag']
-    plot_flag = state['plot_flag']
-    home_dir = state['home_dir']
     theta_ein = state['theta_ein']
 
     if plot_arcsec:
@@ -49,7 +46,7 @@ def caustic_plot(beta_grid_h, beta_grid_v, mu_tot, filename, state):
     cmap = 'cubehelix'  # the color map to use for the plot
     # Creating figures
     print('.........Creating figures.........')
-    fig, ax = plt.subplots(1, 2, constrained_layout=True, figsize=(8, 4.5))
+    fig, ax = plt.subplots(1, 2, constrained_layout=True, figsize=(12, 6))
 
     zoom_h_min = int(beta_grid_h.shape[0] / 2 * (1 - 1 / zoom))
     zoom_v_min = int(beta_grid_h.shape[1] / 2 * (1 - 1 / zoom))
@@ -92,7 +89,7 @@ def caustic_plot(beta_grid_h, beta_grid_v, mu_tot, filename, state):
 
     chart_title = ''
     if method == 'IRS':
-        chart_title = filename + '\n$\u03BE_0$=' + str(
+        chart_title = '\n$\u03BE_0$=' + str(
             np.format_float_scientific(theta_ein, precision=2)) + '", and ' \
                       + str(
             np.format_float_scientific(np.sqrt(fourGc2 / D) * DS, 2)) + 'pc in the source plane; $\kappa$=' + str(
@@ -103,7 +100,7 @@ def caustic_plot(beta_grid_h, beta_grid_v, mu_tot, filename, state):
                       + str(np.format_float_scientific(num_of_img, 2)) + ' rays, with ' + str(
             rays_per_pixel) + ' rays per pixel'
     elif method == 'IPM':
-        chart_title = filename + '\n$\u03BE_0$=' + str(
+        chart_title = '\n$\u03BE_0$=' + str(
             np.format_float_scientific(theta_ein, precision=2)) + '", and ' \
                       + str(
             np.format_float_scientific(np.sqrt(fourGc2 / D) * DS, 2)) + 'pc in the source plane; $\kappa$=' + str(
@@ -114,15 +111,10 @@ def caustic_plot(beta_grid_h, beta_grid_v, mu_tot, filename, state):
                       + str(np.format_float_scientific(num_of_img, 2)) + ' tiles'
 
     fig.suptitle(chart_title)
-
-    if save_flag:
-        print('.........Saving figure')
-        fig.savefig(home_dir + '/figures_out/caustic_maps/'
-                    + filename + '.png', format="png")
     if plot_flag:
         plt.show()
 
-    return 0
+    return fig
 
 
 def draw_from_dis(dis_x, min_x, max_x, max_y, num):
@@ -255,7 +247,7 @@ def lens_gen(zeta_lim, state):
     return m, np.vstack((zeta_h, zeta_v)).T, actual_kappa
 
 
-def light_curve_plot(time_steps, light_curve, time_steps_perp, light_curve_perp, filename, state):
+def light_curve_plot(time_steps, light_curve, time_steps_perp, light_curve_perp, state, plot_flag = True):
     """
     Requires matplotlib.
     This fiunction plots the parallel and perpendicular light curves.
@@ -263,8 +255,8 @@ def light_curve_plot(time_steps, light_curve, time_steps_perp, light_curve_perp,
     :param light_curve: The parallel light curve magnification
     :param time_steps_perp: The perpendicular light curve time steps vector
     :param light_curve_perp: The perpendicular light curve magnification
-    :param filename: The file name to be saved
     :param state: A dictionary containing essential parameters of the script
+    :param plot_flag: Whether or not to show the figure
     :return:
     """
     kappa = state['kappa']
@@ -276,16 +268,13 @@ def light_curve_plot(time_steps, light_curve, time_steps_perp, light_curve_perp,
     fourGc2 = state['fourGc2']
     m = state['m']
     source_size = state['source_size']
-    save_flag = state['save_flag']
-    plot_flag = state['plot_flag']
-    home_dir = state['home_dir']
     theta_ein = state['theta_ein']
 
     fig, ax = plt.subplots(2, 1, figsize=(8, 8))
     if state['method'] == 'ABM':
         n_pixels = state['n_pixels']
         eta = state['eta']
-        chart_title = filename + '\n$\u03BE_0$=' + str(
+        chart_title =  '\n$\u03BE_0$=' + str(
             np.format_float_scientific(theta_ein, precision=2)) + '", and ' \
                       + str(
             np.format_float_scientific(np.sqrt(fourGc2 / D) * DS, 2)) + 'pc in the source plane; $\kappa$=' + str(
@@ -296,7 +285,7 @@ def light_curve_plot(time_steps, light_curve, time_steps_perp, light_curve_perp,
                       + str(int(np.floor(state['num_iter']))) + '+1 iterations, $n_p$=' + str(n_pixels) + 'and $\eta$='\
                       + str(eta)
     elif state['method'] =='IRS' or state['method'] == 'IPM':
-        chart_title = filename + '\n$\u03BE_0$=' + str(
+        chart_title = '\n$\u03BE_0$=' + str(
             np.format_float_scientific(theta_ein, precision=2)) + '", and ' \
                       + str(
             np.format_float_scientific(np.sqrt(fourGc2 / D) * DS, 2)) + 'pc in the source plane; $\kappa$=' + str(
@@ -313,14 +302,9 @@ def light_curve_plot(time_steps, light_curve, time_steps_perp, light_curve_perp,
     ax[1].set_xlabel('Time (yr)')
     ax[1].set_ylabel('$\log_{10}(\mu)$')
     ax[0].set_ylabel('$\log_{10}(\mu)$')
-
-    if save_flag:
-        print('.........Saving figure')
-        fig.savefig(home_dir + '/figures_out/light_curves/'
-                    + filename + '.png', format="png")
     if plot_flag:
         plt.show()
-    return 0
+    return fig
 
 
 def mag_binning(beta, weight, boundary, beta_res, beta_offset=[0,0], print_flag=False):

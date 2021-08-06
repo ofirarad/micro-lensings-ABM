@@ -32,14 +32,14 @@ Mtypical = 1  # The typical mass for the relevant Einstein radius in solar mass 
 
 # User definitions- numerical
 home_dir = os.getcwd()  # main directory of the project; Can be manually set if desired
-save_flag = True  # whether to save the list of sources and magnification to a numpy dump file, and to save the figures.
-plot_flag = True  # whether to show plots (caustic maps and light curves) while running
+save_flag = True  # whether to save all data and figures.
+plot_flag = False  # whether to show figures (caustic maps and light curves) while running (will pause the computation)
 plot_arcsec = True  # Whether to use arc sec for the plot units.
 epsilon = np.sqrt(2.1)  # The size increment factor of FOV in the lens plane (after considering the magnification)
 zeta_mar = 1.2  # Range of point masses locations in the lens plane in units of epsilon
 vt = 1000  # transverse velocity in km/s in the image plane
 light_curve_yr = 5  # length of transverse motion in years, the source plane FOV
-method = 'IRS'  # The chosen method for creating the caustics. Can be either 'IPM', 'IRS' or 'ABM'
+method = 'ABM'  # The chosen method for creating the caustics. Can be either 'IPM', 'IRS' or 'ABM'
 user_seed = 276190  # seed value for replicating random distributions
 
 beta_res = 60  # the resolution in pixels per axis for plotting the source FOV (only for IRS and IPM)
@@ -136,8 +136,6 @@ else:
     zeta = np.zeros((1, 2))
     flat_spec = True
 zeta /= theta_ein  # Transforming the lenses positions to units of Einstein radii
-parameters['zeta'] = zeta
-parameters['m'] = m
 parameters['flat_spec'] = flat_spec
 # Calculating final horizontal and vertical magnification of FOV
 mu_h = 1 / (1 - kappa + gamma)
@@ -145,6 +143,8 @@ mu_v = 1 / (1 - kappa - gamma)
 parameters['mu_h'] = mu_h
 parameters['mu_v'] = mu_v
 parameters['kappa'] = kappa
+parameters['zeta'] = zeta
+parameters['m'] = m
 # ----------------------------------------------------------------------------------------------------------------------
 # Start of simulation
 # ----------------------------------------------------------------------------------------------------------------------
@@ -167,29 +167,35 @@ if method == 'IRS' or method == 'IPM':
     time_steps_perp, light_curve_perp = clc.light_curve(half_width, beta_res, beta_boundary, mu_grid, vt_ein,
                                         shear_parallel=False)
 # ----------------------------------------------------------------------------------------------------------------------
-# Saving and plotting
+# Plotting and saving
 # ----------------------------------------------------------------------------------------------------------------------
+# creating figures
+if method == 'IRS' or method == 'IPM':
+    fig0 = af.caustic_plot(beta_grid_h, beta_grid_v, mu_grid, parameters, plot_flag=plot_flag)
+fig1 = af.light_curve_plot(time_steps, light_curve, time_steps_perp, light_curve_perp, parameters, plot_flag=plot_flag)
+
+#  saving parameters, light curves, caustic and figures
 current_date = time.strftime("%Y%m%d_%H%M", time.localtime())
 if save_flag:
-    if method == 'ABM':
-        print('.........Saving the light curves data as dump file')
-        array2save = np.array([time_steps, light_curve, time_steps_perp, light_curve_perp, parameters], dtype=object)
-        np.save(home_dir + '/data_out/' + current_date, array2save)
-        print('.........Saving figure')
-    elif method == 'IRS' or method == 'IPM':
-        print('.........Saving the sources locations and magnifications as dump file')
-        array2save = np.array([beta_grid_h, beta_grid_v, mu_grid, parameters], dtype=object)
-        np.save(home_dir + '/data_out/' + current_date +'caustic', array2save)
-        print('.........Saving the light curves data as dump file')
-        array2save = np.array([time_steps, light_curve, time_steps_perp, light_curve_perp, parameters], dtype=object)
-        np.save(home_dir + '/data_out/' + current_date, array2save)
-        print('.........Saving figure')
-
-if method == 'ABM':
-    af.light_curve_plot(time_steps, light_curve, time_steps_perp, light_curve_perp, current_date, parameters)
-elif method == 'IRS' or method == 'IPM':
-    af.caustic_plot(beta_grid_h, beta_grid_v, mu_grid, current_date, parameters)
-    af.light_curve_plot(time_steps, light_curve, time_steps_perp, light_curve_perp, current_date, parameters)
-
+    print('.........Creating directory for simulation - ' + str(current_date))
+    path = home_dir + '/output/' + str(current_date) + '/'
+    os.makedirs(path)
+    print('.........Saving the parameters as text file')
+    with open(path + 'parameters.txt', 'w') as data:
+        data.write(str(parameters))
+    print('.........Saving the light curves as csv file')
+    parallel_curve = np.vstack((time_steps, light_curve)).T
+    perp_curve = np.vstack((time_steps_perp, light_curve_perp)).T
+    np.savetxt(path + "_parallel_curve.csv", parallel_curve, delimiter=",")
+    np.savetxt(path + "_perp_curve.csv", perp_curve, delimiter=",")
+    if method == 'IRS' or method == 'IPM':
+        print('.........Saving the sources coordinates and magnifications as csv files')
+        np.savetxt(path + "horizontal_grid.csv", beta_grid_h, delimiter=",")
+        np.savetxt(path + "vertical_grid.csv", beta_grid_v, delimiter=",")
+        np.savetxt(path + "magnification_grid.csv", mu_grid, delimiter=",")
+    print('.........Saving figures')
+    fig1.savefig(path + 'light_curves.png')
+    if method == 'IRS' or method == 'IPM':
+        fig0.savefig(path + 'caustic_map.png')
 
 print('Totally finished in ' + str(time.time() - mega_start_time))
