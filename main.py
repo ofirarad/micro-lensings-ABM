@@ -34,7 +34,7 @@ Mtypical = 1  # The typical mass for the relevant Einstein radius in solar mass 
 home_dir = os.getcwd()  # main directory of the project; Can be manually set if desired
 save_flag = True  # whether to save all data and figures.
 plot_flag = False  # whether to show figures (caustic maps and light curves) while running (will pause the computation)
-plot_arcsec = True  # Whether to use arc sec for the plot units.
+plot_arcsec = True  # Whether to use units of arc sec for the caustic map figure. Otherwise use Einstein radii.
 epsilon = np.sqrt(2.1)  # The size increment factor of FOV in the lens plane (after considering the magnification)
 zeta_mar = 1.2  # Range of point masses locations in the lens plane in units of epsilon
 vt = 1000  # transverse velocity in km/s in the image plane
@@ -47,17 +47,19 @@ beta_zoom = 5  # The zoom-in factor for plotting the source FOV
 max_memory = 0.01  # maximum memory usage for arrays in intermediate calculations, in GB
 
 # IRS settings
-rays_per_pixel = 1  # rays per non-lensed image plane pixels, for IRS method
+rays_per_pixel = 1  # rays per image plane pixels
 
 # IPM settings
 num_of_tiles = 0  # the number of tiles to tessellate the image plane; a square integer. 0 for automatic value.
+# (Mediavilla 2011)
 IPM_l_parameter = 10  # the factor by which the IPM tiles are smaller than the lowest-mass Einstein-radius
-IRS_nlin_tiles = 16 ** 2  # 16 ** 2  # the number of rays to split the non-linear tiles to; must be a square integer
+# (Mediavilla 2011)
+IRS_nlin_tiles = 16 ** 2  # the number of rays to split the non-linear tiles to; must be a square integer
 
 # AOP settings
 n_pixels = 10  # number of image plane pixels per dimension in each division; could change to increase efficiency
 eta_ratio = 0.8
-n_steps = 25  # The number of initial light curve time steps. Half the number of final time steps
+n_steps = 100  # The number of initial light curve time steps. Half the number of final time steps
 beta_0 = 2  # the factor of initial search boundary in the source plane, in units of FOV.
 kernel_flag = True  # Whether to bin rays in the source plane and apply a Gaussian profile before creating light curve
 # ----------------------------------------------------------------------------------------------------------------------
